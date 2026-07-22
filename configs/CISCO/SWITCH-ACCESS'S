@@ -1,1 +1,256 @@
-
+!
+! Last configuration change at 10:04:47 UTC Tue Jul 21 2026 by admin
+!
+version 15.1
+service timestamps debug datetime msec
+service timestamps log datetime msec
+service password-encryption
+service compress-config
+!
+hostname ACCESS-SWITCH1
+!
+enable secret cisco123
+!
+boot-start-marker
+boot-end-marker
+!
+logging discriminator EXCESS severity drops 6 msg-body drops EXCESSCOLL 
+logging buffered 50000
+logging console discriminator EXCESS
+logging host 10.0.2.10
+!
+aaa new-model
+!
+! RADIUS Configuration for NAC
+radius server FREERADIUS_SERVER
+ address ipv4 10.0.2.10 auth-port 1812 acct-port 1813
+ key joejoseph
+!
+aaa group server radius MY_RAD_GROUP
+ server name FREERADIUS_SERVER
+!
+! AAA Methods
+aaa authentication login default group tacacs+ local
+aaa authentication dot1x default group MY_RAD_GROUP
+aaa authorization exec default group tacacs+ local 
+aaa authorization network default group MY_RAD_GROUP
+aaa accounting exec default start-stop group tacacs+
+aaa accounting commands 1 default start-stop group tacacs+
+aaa accounting commands 15 default start-stop group tacacs+
+aaa accounting dot1x default start-stop group MY_RAD_GROUP
+!
+!
+!
+!
+!
+aaa session-id common
+no ip icmp rate-limit unreachable
+!
+ip cef
+!
+!
+ip domain-name carlos-netpro.local
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+!
+no ip domain-lookup
+no ipv6 cef
+ipv6 multicast rpf use-bgp
+!
+! VTP Configuration - CLIENT MODE
+vtp domain kingstar.company
+vtp version 3
+vtp mode client mst
+vtp mode client vlan
+vtp password joejoseph hidden
+!
+! MST Configuration
+spanning-tree mode mst
+spanning-tree extend system-id
+spanning-tree mst configuration
+ name kingstar-region
+ revision 1
+ instance 1 vlan 10, 20, 30
+ instance 2 vlan 40, 50, 60, 70
+!
+!
+!
+!
+!
+!
+!
+vlan internal allocation policy ascending
+!
+ip tcp synwait-time 5
+!
+! 802.1X Global Configuration
+dot1x system-auth-control
+ip radius source-interface Vlan60
+!
+!
+!
+!
+interface Ethernet0/0
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 10,20,30,40,50,60,70
+ switchport mode trunk
+ duplex auto
+!
+interface Ethernet0/1
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 10,20,30,40,50,60,70
+ switchport mode trunk
+ duplex auto
+!
+interface Ethernet0/2
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 10,20,30,40,50,60,70
+ switchport mode trunk
+ duplex auto
+!
+interface Ethernet0/3
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 10,20,30,40,50,60,70
+ switchport mode trunk
+ duplex auto
+!
+interface Ethernet1/0
+ switchport access vlan 40
+ switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
+ authentication periodic
+ authentication order mab
+ authentication priority mab
+ authentication host-mode multi-auth
+ authentication event fail action next-method
+ authentication port-control auto
+ authentication control-direction in
+ dot1x pae authenticator
+ mab
+ spanning-tree portfast
+ dot1x timeout quiet-period 20
+!
+interface Ethernet1/1
+ switchport access vlan 40
+ switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
+ authentication periodic
+ authentication order mab
+ authentication priority mab
+ authentication host-mode multi-auth
+ authentication event fail action next-method
+ authentication port-control auto
+ authentication control-direction in
+ dot1x pae authenticator
+ mab
+ spanning-tree portfast
+ dot1x timeout quiet-period 20
+!
+interface Ethernet1/2
+ switchport access vlan 40
+ switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
+ authentication periodic
+ authentication order mab
+ authentication priority mab
+ authentication host-mode multi-auth
+ authentication event fail action next-method
+ authentication port-control auto
+ authentication control-direction in
+ dot1x pae authenticator
+ mab
+ spanning-tree portfast
+ dot1x timeout quiet-period 20
+!
+interface Ethernet1/3
+ switchport access vlan 40
+ switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
+ authentication periodic
+ authentication order mab
+ authentication priority mab
+ authentication host-mode multi-auth
+ authentication event fail action next-method
+ authentication port-control auto
+ authentication control-direction in
+ dot1x pae authenticator
+ mab
+ spanning-tree portfast
+ dot1x timeout quiet-period 20
+!
+interface Ethernet2/0
+ duplex auto
+!
+interface Ethernet2/1
+ duplex auto
+!
+interface Ethernet2/2
+ duplex auto
+!
+interface Ethernet2/3
+ duplex auto
+!
+interface Ethernet3/0
+ duplex auto
+!
+interface Ethernet3/1
+ duplex auto
+!
+interface Ethernet3/2
+ duplex auto
+!
+interface Ethernet3/3
+ duplex auto
+!
+interface Vlan1
+ no ip address
+ shutdown
+!
+interface Vlan50
+ ip address 10.0.0.6 255.255.254.0
+!
+interface Vlan60
+ ip address 10.0.2.30 255.255.254.0
+ ip helper-address 10.0.2.10
+!
+!
+!
+no ip http server
+ip http secure-server
+ip http secure-ciphersuite 3des-ede-cbc-sha aes-128-cbc-sha aes-256-cbc-sha
+!
+!
+!
+tacacs server KALI_TACACS
+ address ipv4 10.0.2.10
+ key joejoseph
+ single-connection
+!
+!
+!
+line con 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line aux 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line vty 0 4
+ transport input ssh
+ login authentication default
+!
+end
