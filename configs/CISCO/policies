@@ -1,0 +1,397 @@
+! ==============================================
+! SUMMARY OF RESTRICTIONS
+! ==============================================
+
+! 1. Guest VLAN: Only HTTP/HTTPS/DNS (No Social Media)
+! 2. IoT VLAN: No Internet Access (Local Only)
+! 3. P2P/File Sharing: Blocked
+! 4. Social Media: Blocked (Facebook, Twitter, Instagram, etc.)
+! 5. Streaming Services: Limited Bandwidth
+! 6. Voice: Priority Traffic (EF Marking)
+! 7. Management: Access only from MGMT VLAN
+! 8. Control Plane: Protected from DoS attacks
+! 9. VPN Traffic: Prioritized
+! 10. Default Deny: All other traffic blocked
+
+
+
+
+
+!
+! ==============================================
+! HQ-ROUTER - POLICY-BASED ROUTING (PBR)
+! ==============================================
+
+! ==============================================
+! ACLS FOR TRAFFIC CLASSIFICATION
+! ==============================================
+
+! ACL 100: Voice Traffic - Prioritize
+ip access-list extended ACL-VOICE
+ permit udp any any range 16384 32767       ! RTP Ports (Voice)
+ permit tcp any any eq 5060                 ! SIP
+ permit udp any any eq 5060                 ! SIP
+ permit tcp any any eq 2000                 ! SCCP
+ permit udp any any eq 2000                 ! SCCP
+!
+
+! ACL 101: Management Traffic - Critical
+ip access-list extended ACL-MGMT
+ permit tcp 10.0.0.0 0.0.1.255 any eq 22   ! SSH from MGMT
+ permit tcp 10.0.0.0 0.0.1.255 any eq 443  ! HTTPS from MGMT
+ permit tcp 10.0.0.0 0.0.1.255 any eq 161  ! SNMP from MGMT
+ permit udp 10.0.0.0 0.0.1.255 any eq 161  ! SNMP
+!
+
+! ACL 102: Data Traffic - Standard
+ip access-list extended ACL-DATA
+ permit ip 10.0.4.0 0.0.0.255 any          ! VLAN 10 Data
+ permit ip 10.0.5.0 0.0.0.255 any          ! VLAN 20 Voice
+!
+
+! ACL 103: Guest Traffic - Low Priority
+ip access-list extended ACL-GUEST
+ permit ip 10.0.6.0 0.0.0.255 any          ! VLAN 30 Guest
+!
+
+! ACL 104: IoT Traffic - Restricted
+ip access-list extended ACL-IOT
+ permit ip 10.0.7.0 0.0.0.255 any          ! VLAN 40 IoT
+!
+
+! ACL 105: Server Traffic
+ip access-list extended ACL-SERVERS
+ permit ip 10.0.2.0 0.0.1.255 any          ! VLAN 60 Servers
+!
+
+! ACL 106: VPN Traffic
+ip access-list extended ACL-VPN-TRAFFIC
+ permit ip 10.0.0.0 0.0.255.255 192.168.0.0 0.0.255.255
+!
+
+! ACL 107: Block Social Media (Restrictions)
+ip access-list extended ACL-BLOCK-SOCIAL
+ deny   tcp any any eq 80                   ! HTTP - will use NBAR for social media
+ deny   tcp any any eq 443                  ! HTTPS
+ permit ip any any
+!
+
+! ==============================================
+! CLASS MAPS (NBAR for Application Recognition)
+! ==============================================
+
+! NBAR - Network Based Application Recognition
+class-map match-any CLASS-VOICE
+ match protocol rtp
+ match protocol sip
+ match protocol rtcp
+ match protocol skype
+!
+
+class-map match-any CLASS-BLOCKED-APPS
+ match protocol http url "*.facebook.com/*"
+ match protocol http url "*.twitter.com/*"
+ match protocol http url "*.instagram.com/*"
+ match protocol http url "*.youtube.com/*"
+ match protocol http url "*.tiktok.com/*"
+ match protocol http url "*.snapchat.com/*"
+ match protocol http url "*.reddit.com/*"
+!
+
+class-map match-any CLASS-MISSION-CRITICAL
+ match access-group name ACL-MGMT
+ match access-group name ACL-VOICE
+!
+
+class-map match-any CLASS-STANDARD
+ match access-group name ACL-DATA
+ match access-group name ACL-SERVERS
+!
+
+class-map match-any CLASS-LOW-PRIORITY
+ match access-group name ACL-GUEST
+!
+
+class-map match-any CLASS-RESTRICTED
+ match access-group name ACL-IOT
+!
+
+! ==============================================
+! POLICY MAPS (QoS & PBR)
+! ==============================================
+
+! Policy Map for Traffic Treatment
+policy-map POLICY-ENGINE
+ class CLASS-MISSION-CRITICAL
+   priority level 1
+   police cir 100000000 bc 31250000 conform-action transmit exceed-action drop
+   set ip dscp ef
+   set ip precedence 5
+ !
+ class CLASS-VOICE
+   priority level 1
+   police cir 50000000 bc 15625000 conform-action transmit exceed-action drop
+   set ip dscp af41
+   set ip precedence 4
+ !
+ class CLASS-STANDARD
+   bandwidth remaining percent 30
+   set ip dscp af21
+   set ip precedence 2
+ !
+ class CLASS-LOW-PRIORITY
+   bandwidth remaining percent 10
+   set ip dscp af11
+   set ip precedence 1
+ !
+ class CLASS-RESTRICTED
+   police cir 1000000 bc 250000 conform-action transmit exceed-action drop
+   set ip dscp default
+   set ip precedence 0
+ !
+ class CLASS-BLOCKED-APPS
+   drop
+   log
+ !
+ class class-default
+   fair-queue
+   set ip dscp default
+!
+
+! ==============================================
+! ROUTE MAPS FOR POLICY-BASED ROUTING
+! ==============================================
+
+! Route Map: Send Voice/Management via Primary WAN (Cisco Router)
+route-map PBR-PRIMARY-WAN permit 10
+ match ip address ACL-VOICE ACL-MGMT ACL-SERVERS
+ set ip next-hop verify-availability 10.0.100.1 1 track 1
+ set ip next-hop 10.0.100.1
+ set interface Tunnel0
+!
+
+! Route Map: Send Data via Tunnel (Cisco VPN)
+route-map PBR-PRIMARY-WAN permit 20
+ match ip address ACL-DATA
+ set ip next-hop Tunnel0
+ set interface Tunnel0
+!
+
+! Route Map: Guest via FortiGate (Backup Path)
+route-map PBR-SECONDARY-WAN permit 10
+ match ip address ACL-GUEST
+ set ip next-hop 10.0.100.3
+ set ip next-hop 10.0.200.1
+!
+
+! Route Map: IoT - Local Only (Block Internet)
+route-map PBR-BLOCK-IOT deny 10
+ match ip address ACL-IOT
+!
+
+! Route Map: VPN Traffic
+route-map PBR-VPN permit 10
+ match ip address ACL-VPN-TRAFFIC
+ set ip next-hop Tunnel0
+!
+
+! ==============================================
+! APPLICATION OF PBR ON INTERFACES
+! ==============================================
+
+! Apply PBR on LAN interface
+interface GigabitEthernet0/1
+ ip address 172.16.1.2 255.255.255.252
+ ip policy route-map PBR-PRIMARY-WAN
+ ip route-cache policy
+!
+
+! Apply PBR on WAN interface
+interface GigabitEthernet0/0
+ ip address 192.168.201.174 255.255.255.0
+ ip policy route-map PBR-PRIMARY-WAN
+!
+
+! ==============================================
+! IP SLA FOR PATH MONITORING
+! ==============================================
+
+! IP SLA - Monitor Primary WAN
+ip sla 1
+ icmp-echo 8.8.8.8 source-ip 192.168.201.174
+ timeout 2000
+ frequency 10
+!
+ip sla schedule 1 life forever start-time now
+
+! IP SLA - Monitor FortiGate
+ip sla 2
+ icmp-echo 192.168.201.173 source-ip 192.168.201.174
+ timeout 2000
+ frequency 10
+!
+ip sla schedule 2 life forever start-time now
+
+! IP SLA - Monitor Branch VPN
+ip sla 3
+ icmp-echo 192.168.201.180 source-ip 192.168.201.174
+ timeout 3000
+ frequency 15
+!
+ip sla schedule 3 life forever start-time now
+
+! ==============================================
+! TRACK OBJECTS FOR FAILOVER
+! ==============================================
+
+track 1 ip sla 1 reachability
+!
+
+track 2 ip sla 2 reachability
+!
+
+track 3 ip sla 3 reachability
+!
+
+! ==============================================
+! FLOATING STATIC ROUTES WITH TRACKING
+! ==============================================
+
+! Primary Gateway (Cisco Router)
+ip route 0.0.0.0 0.0.0.0 192.168.201.2 track 1
+ip route 0.0.0.0 0.0.0.0 192.168.201.2 5
+
+! Backup Gateway (FortiGate)
+ip route 0.0.0.0 0.0.0.0 192.168.201.173 10 track 2
+
+! Backup via FortiGate VTI
+ip route 0.0.0.0 0.0.0.0 Tunnel1 20
+
+! ==============================================
+! ZONE-BASED FIREWALL (ZBF) - RESTRICTIONS
+! ==============================================
+
+! Define Zones
+zone security LAN
+ zone security WAN
+ zone security VPN
+ zone security DMZ
+
+! Zone Pairs
+zone-pair security LAN-TO-WAN source LAN destination WAN
+ service-policy type inspect POLICY-LAN-TO-WAN
+
+zone-pair security LAN-TO-DMZ source LAN destination DMZ
+ service-policy type inspect POLICY-LAN-TO-DMZ
+
+! Policy Map for Zone-Based Firewall
+policy-map type inspect POLICY-LAN-TO-WAN
+ class type inspect CLASS-LAN-TRAFFIC
+  inspect
+  drop log
+!
+
+class-map type inspect CLASS-LAN-TRAFFIC
+ match protocol tcp
+ match protocol udp
+ match protocol icmp
+!
+
+! ==============================================
+! CONTROL PLANE POLICING (CoPP)
+! ==============================================
+
+! CoPP - Protect Router CPU
+class-map COPP-CRITICAL
+ match access-group 110
+
+class-map COPP-MANAGEMENT
+ match access-group 111
+
+class-map COPP-BULK
+ match access-group 112
+
+class-map COPP-DEFAULT
+ match any
+
+policy-map COPP-POLICY
+ class COPP-CRITICAL
+  police cir 1024000 bc 256000 conform-action transmit exceed-action drop
+ class COPP-MANAGEMENT
+  police cir 512000 bc 128000 conform-action transmit exceed-action drop
+ class COPP-BULK
+  police cir 256000 bc 64000 conform-action transmit exceed-action drop
+ class COPP-DEFAULT
+  police cir 128000 bc 32000 conform-action transmit exceed-action drop
+
+control-plane
+ service-policy input COPP-POLICY
+
+! ==============================================
+! ACL FOR CONTROL PLANE
+! ==============================================
+
+! ACL 110 - Critical (BGP, OSPF, etc.)
+access-list 110 permit ospf any any
+access-list 110 permit tcp any any eq bgp
+access-list 110 permit udp any any eq 646
+
+! ACL 111 - Management (SSH, SNMP, etc.)
+access-list 111 permit tcp 10.0.0.0 0.0.255.255 any eq 22
+access-list 111 permit tcp 10.0.0.0 0.0.255.255 any eq 443
+access-list 111 permit udp 10.0.0.0 0.0.255.255 any eq 161
+
+! ACL 112 - Bulk (ICMP, etc.)
+access-list 112 permit icmp any any
+
+! ==============================================
+! RESTRICTIONS - BLOCK SPECIFIC TRAFFIC
+! ==============================================
+
+! Block Peer-to-Peer Applications
+class-map match-any P2P-TRAFFIC
+ match protocol napster
+ match protocol edonkey
+ match protocol gnutella
+ match protocol bittorrent
+
+policy-map BLOCK-P2P
+ class P2P-TRAFFIC
+  drop
+  log
+
+! Block Social Media (Using NBAR)
+class-map match-any SOCIAL-MEDIA
+ match protocol http url "*.facebook.com/*"
+ match protocol http url "*.twitter.com/*"
+ match protocol http url "*.instagram.com/*"
+ match protocol http url "*.youtube.com/*"
+ match protocol http url "*.tiktok.com/*"
+
+policy-map BLOCK-SOCIAL
+ class SOCIAL-MEDIA
+  drop
+  log
+
+! ==============================================
+! LOGGING & MONITORING
+! ==============================================
+
+! Enable logging for all dropped traffic
+ip access-list logging
+ip access-list log-update threshold 100
+
+! Send logs to Syslog Server
+logging host 10.0.2.10
+logging trap notifications
+logging source-interface Vlan50
+logging facility local0
+
+! Enable NetFlow for Traffic Analysis
+ip flow-export version 9
+ip flow-export destination 10.0.2.10 9995
+interface GigabitEthernet0/1
+ ip flow ingress
+ ip flow egress
+
+!
