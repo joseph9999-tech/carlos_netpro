@@ -46,9 +46,17 @@ ip ssh authentication-retries 3
 no ip domain-lookup
 no ipv6 cef
 ipv6 multicast rpf use-bgp
-spanning-tree mode pvst
-spanning-tree extend system-id
 !
+! VTP Configuration - CLIENT MODE (Transparent)
+vtp domain kingstar.company
+vtp version 3
+vtp mode client mst
+vtp mode client vlan
+vtp password joejoseph hidden
+!
+! MST Configuration
+spanning-tree mode mst
+spanning-tree extend system-id
 spanning-tree mst configuration
  name kingstar-region
  revision 1
@@ -66,7 +74,9 @@ vlan internal allocation policy ascending
 ip tcp synwait-time 5
 !
 !
-!
+! ==============================================
+! INTERFACE CONFIGURATIONS
+! ==============================================
 !
 interface Port-channel1
  switchport
@@ -75,6 +85,7 @@ interface Port-channel1
  switchport mode trunk
  bandwidth 10000
 !
+! Uplink to CORE1 (Primary)
 interface Ethernet0/0
  switchport trunk encapsulation dot1q
  switchport trunk allowed vlan 10,20,30,40,50,60,70
@@ -83,6 +94,7 @@ interface Ethernet0/0
  channel-protocol lacp
  channel-group 1 mode active
 !
+! Uplink to CORE2 (Secondary)
 interface Ethernet0/1
  switchport trunk encapsulation dot1q
  switchport trunk allowed vlan 10,20,30,40,50,60,70
@@ -103,46 +115,80 @@ interface Ethernet0/3
  switchport mode trunk
  duplex auto
 !
+! Access Ports to End Users
 interface Ethernet1/0
  switchport access vlan 10
  switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
  spanning-tree portfast
 !
 interface Ethernet1/1
  switchport access vlan 10
  switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
  spanning-tree portfast
 !
 interface Ethernet1/2
  switchport access vlan 20
  switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
  spanning-tree portfast
 !
 interface Ethernet1/3
  switchport access vlan 20
  switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
  spanning-tree portfast
 !
 interface Ethernet2/0
  switchport access vlan 30
  switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
  spanning-tree portfast
 !
 interface Ethernet2/1
  switchport access vlan 30
  switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
  spanning-tree portfast
 !
 interface Ethernet2/2
  switchport access vlan 40
  switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
  spanning-tree portfast
 !
 interface Ethernet2/3
  switchport access vlan 40
  switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
  spanning-tree portfast
 !
+! Trunk to Access Switch
 interface Ethernet3/0
  switchport trunk encapsulation dot1q
  switchport trunk allowed vlan 10,20,30,40,50,60,70
@@ -171,6 +217,7 @@ interface Vlan1
  no ip address
  shutdown
 !
+! Management Interface
 interface Vlan50
  ip address 10.0.0.6 255.255.254.0
 !
