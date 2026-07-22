@@ -1,0 +1,211 @@
+!
+! Last configuration change at 08:31:15 UTC Tue Jul 21 2026 by admin
+!
+version 15.9
+service timestamps debug datetime msec
+service timestamps log datetime msec
+service password-encryption
+service compress-config
+!
+hostname HQ-ROUTER
+!
+enable secret cisco123
+!
+boot-start-marker
+boot-end-marker
+!
+!
+logging buffered 50000
+logging console discriminator EXCESS
+logging host 10.0.2.10
+!
+aaa new-model
+!
+!
+aaa authentication login default local
+aaa authentication login SSL-VPN local
+aaa authorization network SSL-VPN local
+!
+!
+!
+!
+!
+mmi polling-interval 60
+no mmi auto-configure
+no mmi pvc
+mmi snmp-timeout 180
+!
+ip cef
+no ipv6 cef
+!
+multilink bundle-name authenticated
+!
+!
+!
+!
+!
+redundancy
+!
+! ==============================================
+! SSL VPN CONFIGURATION (Cisco AnyConnect)
+! ==============================================
+!
+! SSL VPN Pool - 192.168.147.0/23
+ip local pool SSL-VPN-POOL 192.168.147.1 192.168.148.254
+!
+! SSL VPN User Accounts
+username vpn-user1 password joe_joseph
+username vpn-user2 password joe_joseph12
+username admin password admin_123 privilege 15
+!
+! SSL VPN Gateway
+crypto ssl trustpoint SSL-VPN-TP
+ enrollment selfsigned
+ subject-name cn=HQ-ROUTER.carlos-netpro.local
+ revocation-check none
+!
+webvpn gateway SSL-GATEWAY
+ ip address 192.168.201.174 port 443
+ http-redirect port 80
+ ssl trustpoint SSL-VPN-TP
+ inservice
+!
+webvpn context SSL-CONTEXT
+ ssl authenticate verify all
+ aaa authentication list SSL-VPN
+ aaa authorization group SSL-VPN
+ gateway SSL-GATEWAY
+ inservice
+!
+webvpn context SSL-CONTEXT
+ policy group SSL-POLICY
+  functions svc-enabled
+  svc address-pool "SSL-VPN-POOL"
+  svc split include 10.0.0.0 255.255.0.0
+  svc split include 192.168.0.0 255.255.0.0
+  svc dns-server primary 10.0.2.10
+  svc default-domain carlos-netpro.local
+  svc keep-client-installed
+ default-group-policy SSL-POLICY
+!
+! ==============================================
+! IPSEC VPN CONFIGURATION (Site-to-Site to Branch)
+! ==============================================
+!
+crypto isakmp policy 10
+ hash sha256
+ authentication pre-share
+ group 14
+!
+crypto isakmp key joejoseph@9999 address 192.168.201.180
+!
+crypto isakmp peer address 192.168.201.180
+ set aggressive-mode client-endpoint fqdn HQ-ROUTER1
+!
+crypto ipsec transform-set TS_FORTINET esp-aes 256 esp-sha256-hmac
+ mode tunnel
+!
+crypto ipsec profile FORTI_VTI_PROFILE
+ set transform-set TS_FORTINET
+!
+! Tunnel to Branch Router (Primary via Cisco)
+interface Tunnel0
+ ip address 10.10.2.1 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf 1 area 0
+ ip ospf cost 100
+ tunnel source GigabitEthernet0/0
+ tunnel mode ipsec ipv4
+ tunnel destination 192.168.201.180
+ tunnel protection ipsec profile FORTI_VTI_PROFILE
+!
+! Tunnel to FortiGate (Backup)
+interface Tunnel1
+ ip address 10.10.3.1 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf 1 area 0
+ ip ospf cost 200
+ tunnel source GigabitEthernet0/0
+ tunnel destination 192.168.201.173
+ tunnel protection ipsec profile FORTI_VTI_PROFILE
+!
+! ==============================================
+! INTERFACE CONFIGURATIONS
+! ==============================================
+!
+interface GigabitEthernet0/0
+ ip address 192.168.201.174 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+ vrrp 1 ip 192.168.201.175
+!
+interface GigabitEthernet0/1
+ ip address 172.16.1.2 255.255.255.252
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/2
+ ip address 10.0.100.1 255.255.255.252
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/3
+ no ip address
+ shutdown
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/4
+ no ip address
+ shutdown
+ duplex auto
+ speed auto
+ media-type rj45
+!
+! ==============================================
+! ROUTING CONFIGURATIONS
+! ==============================================
+!
+router ospf 1
+ router-id 2.2.2.2
+ network 10.0.0.0 0.0.7.255 area 0
+ network 10.10.2.0 0.0.0.3 area 0
+ network 10.10.3.0 0.0.0.3 area 0
+!
+router ospf 2
+ network 10.0.100.0 0.0.0.3 area 1
+ network 192.168.0.0 0.0.255.255 area 1
+!
+ip forward-protocol nd
+!
+!
+no ip http server
+ip http secure-server
+ip http secure-ciphersuite 3des-ede-cbc-sha aes-128-cbc-sha aes-256-cbc-sha
+!
+ip route 0.0.0.0 0.0.0.0 192.168.201.2
+!
+ipv6 ioam timestamp
+!
+!
+!
+control-plane
+!
+!
+line con 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line aux 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line vty 0 4
+ transport input ssh
+ login authentication default
+!
+end
