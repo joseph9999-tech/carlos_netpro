@@ -1,1 +1,176 @@
-
+!
+! Last configuration change at 11:19:09 UTC Wed Jul 22 2026
+!
+version 15.1
+service timestamps debug datetime msec
+service timestamps log datetime msec
+service password-encryption
+service compress-config
+!
+hostname B-SERVER-SW
+!
+enable secret cisco123
+!
+boot-start-marker
+boot-end-marker
+!
+logging discriminator EXCESS severity drops 6 msg-body drops EXCESSCOLL
+logging buffered 50000
+logging console discriminator EXCESS
+logging host 10.0.2.10
+!
+aaa new-model
+!
+!
+aaa authentication login default group tacacs+ local
+aaa authorization exec default group tacacs+ local 
+aaa accounting exec default start-stop group tacacs+
+aaa accounting commands 1 default start-stop group tacacs+
+aaa accounting commands 15 default start-stop group tacacs+
+!
+!
+!
+!
+!
+aaa session-id common
+no ip icmp rate-limit unreachable
+!
+ip cef
+!
+!
+ip domain-name carlos-netpro.local
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+!
+no ip domain-lookup
+no ipv6 cef
+ipv6 multicast rpf use-bgp
+!
+! VTP Configuration - CLIENT MODE
+vtp domain kingstar.company
+vtp version 3
+vtp mode client mst
+vtp mode client vlan
+vtp password joejoseph hidden
+!
+! MST Configuration
+spanning-tree mode mst
+spanning-tree extend system-id
+spanning-tree mst configuration
+ name kingstar-region
+ revision 1
+ instance 1 vlan 10, 20, 30
+ instance 2 vlan 40, 50, 60, 70
+!
+!
+!
+!
+!
+!
+!
+vlan internal allocation policy ascending
+!
+ip tcp synwait-time 5
+!
+!
+!
+!
+interface Ethernet0/0
+ duplex auto
+!
+interface Ethernet0/1
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 10,20,30,40,50,60,70
+ switchport mode trunk
+ duplex auto
+!
+interface Ethernet0/2
+ duplex auto
+!
+interface Ethernet0/3
+ duplex auto
+!
+interface Ethernet1/0
+ switchport access vlan 60
+ switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
+ spanning-tree portfast
+!
+interface Ethernet1/1
+ switchport access vlan 60
+ switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation shutdown
+ switchport port-security mac-address sticky
+ spanning-tree portfast
+!
+interface Ethernet1/2
+ duplex auto
+!
+interface Ethernet1/3
+ duplex auto
+!
+interface Ethernet2/0
+ duplex auto
+!
+interface Ethernet2/1
+ duplex auto
+!
+interface Ethernet2/2
+ duplex auto
+!
+interface Ethernet2/3
+ duplex auto
+!
+interface Ethernet3/0
+ duplex auto
+!
+interface Ethernet3/1
+ duplex auto
+!
+interface Ethernet3/2
+ duplex auto
+!
+interface Ethernet3/3
+ duplex auto
+!
+interface Vlan1
+ no ip address
+ shutdown
+!
+interface Vlan60
+ ip address 192.168.2.2 255.255.255.0
+!
+!
+!
+no ip http server
+ip http secure-server
+ip http secure-ciphersuite 3des-ede-cbc-sha aes-128-cbc-sha aes-256-cbc-sha
+!
+!
+!
+tacacs server KALI_TACACS
+ address ipv4 10.0.2.10
+ key joejoseph
+ single-connection
+!
+!
+!
+line con 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line aux 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line vty 0 4
+ transport input ssh
+ login authentication default
+!
+end
